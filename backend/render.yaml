@@ -1,0 +1,47 @@
+version: "3.9"
+
+services:
+  api:
+    image: python:3.10-slim
+    container_name: photomaker-api
+    working_dir: /app
+    volumes:
+      - ./backend:/app
+    environment:
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_USER: photomaker
+      DB_PASSWORD: photomaker
+      DB_NAME: photomaker
+      PYTHONUNBUFFERED: "1"
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    command: >
+      sh -c "pip install --no-cache-dir -r requirements.txt &&
+      mkdir -p uploads/original uploads/processed &&
+      uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+  db:
+    image: mysql:8.0
+    container_name: photomaker-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: photomaker
+      MYSQL_USER: photomaker
+      MYSQL_PASSWORD: photomaker
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u$$MYSQL_USER -p$$MYSQL_PASSWORD || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mysql_data:
