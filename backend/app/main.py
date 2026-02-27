@@ -1,18 +1,17 @@
-﻿import sys
+import sys
 import os
 from fastapi import FastAPI
-
-# Add the parent directory (backend/) to sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from app.api.v1 import photos
 import logging
 
-# Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Force CPU before anything loads
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+os.environ["ORT_DISABLE_GPU"] = "1"
 
 app = FastAPI(
     title="Photomaker AI Backend",
@@ -20,31 +19,30 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS Configuration (React Frontend ke liye)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Production mein specific domains rakhenge
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Static Files (Public access to photos)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 app.mount("/web", StaticFiles(directory="frontend", html=True), name="web")
 
-# Include Routers
-app.include_router(photos.router, prefix="/api/v1/photos", tags=["Photos"])
-
+# Health check FIRST — so Render detects the port
 @app.get("/")
 async def root():
-    return {
-        "status": "online",
-        "message": "Welcome to Photogov.net Clone API",
-        "docs": "/docs"
-    }
+    return {"status": "online", "message": "Welcome to Photogov.net Clone API"}
+
+# LAZY import — load photos router AFTER server starts
+@app.on_event("startup")
+async def startup():
+    logger.info("Server started, loading routes...")
+    from app.api.v1 import photos
+    app.include_router(photos.router, prefix="/api/v1/photos", tags=["Photos"])
+    logger.info("Routes loaded successfully")
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
-
